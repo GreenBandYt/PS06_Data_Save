@@ -1,38 +1,67 @@
-import time
-import csv
+import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-driver  = webdriver.Chrome()
+# Создаем экземпляр драйвера
+driver = webdriver.Chrome()
 
-url = "https://www.divan.ru/smolensk/category/sadovye-stoly"
+# URL для парсинга
+url = "https://www.divan.ru/smolensk/category/divany-i-kresla"
 
+# Открываем страницу
 driver.get(url)
-time.sleep(5)
 
-stoly = driver.find_elements(By.CLASS_NAME, 'lsooF')
-print(stoly)
-parsed_data = []
+# Явное ожидание загрузки элементов
+wait = WebDriverWait(driver, 10)
 
-for stol in stoly:
+# Находим все элементы с диванами
+sofa_elements = wait.until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'lsooF')))
+
+# Создаем списки для хранения данных
+titles = []
+prices_raw = []
+links = []
+
+# Извлекаем данные
+for sofa in sofa_elements:
     try:
-        title = stol.find_element(By.CSS_SELECTOR, 'class.ui-GPFV8').text
-        #price = stol.find_element(By.CSS_SELECTOR, 'span.ui-LD-ZU KIkOH').text
-        #link = stol.find_element(By.CSS_SELECTOR, 'a.ui-GPFV8 qUioe ProductName ActiveProduct').get_attribute('href')
-    except:
-        print("Произошла ошибка при парсинге")
-        continue
+        # Извлекаем название дивана
+        title_element = sofa.find_element(By.XPATH, ".//span[@itemprop='name']")
 
+        # Извлекаем цену дивана (используя более общий подход)
+        price_element = sofa.find_element(By.XPATH,
+                                          ".//span[contains(@class, 'ui-LD-ZU') and contains(@class, 'KIkOH')]")
 
-    parsed_data.append([title])
+        # Получаем текст цены и валюту
+        price_value = price_element.text.strip().replace(" ", "")  # Убираем пробелы из цены
+        price_currency = price_element.find_element(By.XPATH,
+                                                    ".//span[contains(@class, 'ui-i5wwi')]").text.strip()  # Получаем валюту
+        full_price = f"{price_value} {price_currency}"  # Форматируем полную цену
+
+        # Получаем ссылку на диван
+        link_element = sofa.find_element(By.XPATH, ".//a[contains(@class, 'ui-GPFV8')]")  # Получаем элемент ссылки
+
+        titles.append(title_element.text.strip())
+        prices_raw.append(full_price)  # Добавляем полную цену
+        links.append(link_element.get_attribute('href'))
+
+        # Выводим информацию для отладки
+        print(
+            f"Название: {title_element.text.strip()}, Цена: {full_price}, Ссылка: {link_element.get_attribute('href')}")
+    except Exception as e:
+        print(f"Ошибка извлечения данных: {e}")
+
+# Закрываем драйвер
 driver.quit()
 
-with open('hh.csv', 'w', newline='', encoding='utf-8') as file:
-    writer = csv.writer(file)
-
-    writer.writerow(['Название', 'Цена', 'Ссылка'])
-    writer.writerows(parsed_data)
-
-
-
-
+# Сохраняем данные в CSV файл
+data = {
+    'Название': titles,
+    'Цена': prices_raw,
+    'Ссылка': links
+}
+df = pd.DataFrame(data)
+df.to_csv('sofa_data.csv', index=False, encoding='utf-8-sig')  # Убедитесь, что файл сохранен с правильной кодировкой
+print("Данные успешно спарсены и сохранены в sofa_data.csv")
